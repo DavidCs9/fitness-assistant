@@ -4,7 +4,7 @@ from datetime import datetime, timezone, timedelta
 from shared.config import Config
 from shared.dynamo import get_daily_summaries_range, get_body_metrics_range
 from shared.llm import generate_weekly_trend_message
-from shared.whatsapp import send_message
+from shared.telegram import send_message
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -15,23 +15,23 @@ def lambda_handler(event: dict, context) -> dict:
     end_date = now.strftime("%Y-%m-%d")
     start_date = (now - timedelta(days=6)).strftime("%Y-%m-%d")
 
-    for phone in Config.ALLOWED_PHONE_NUMBERS:
+    for chat_id in Config.ALLOWED_CHAT_IDS:
         try:
-            _send_weekly_trend(phone, start_date, end_date)
+            _send_weekly_trend(chat_id, start_date, end_date)
         except Exception:
-            logger.exception("Failed to send weekly trend to %s", phone)
+            logger.exception("Failed to send weekly trend to %s", chat_id)
 
     return {"statusCode": 200}
 
 
-def _send_weekly_trend(phone: str, start_date: str, end_date: str) -> None:
-    days = get_daily_summaries_range(phone, start_date, end_date)
-    body_metrics = get_body_metrics_range(phone, start_date, end_date)
+def _send_weekly_trend(chat_id: str, start_date: str, end_date: str) -> None:
+    days = get_daily_summaries_range(chat_id, start_date, end_date)
+    body_metrics = get_body_metrics_range(chat_id, start_date, end_date)
 
     if not days:
-        logger.info("No data for %s in range %s-%s, skipping", phone, start_date, end_date)
+        logger.info("No data for %s in range %s-%s, skipping", chat_id, start_date, end_date)
         return
 
     message = generate_weekly_trend_message(days, body_metrics)
-    send_message(phone, message)
-    logger.info("Sent weekly trend to %s (%s to %s)", phone, start_date, end_date)
+    send_message(chat_id, message)
+    logger.info("Sent weekly trend to %s (%s to %s)", chat_id, start_date, end_date)

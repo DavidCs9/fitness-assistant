@@ -20,10 +20,9 @@ Globals:
         TABLE_NAME: !Ref FitnessTable
         STAGE: !Ref Stage
         ANTHROPIC_API_KEY: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:ANTHROPIC_API_KEY}}'
-        WHATSAPP_TOKEN: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:WHATSAPP_TOKEN}}'
-        WHATSAPP_VERIFY_TOKEN: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:WHATSAPP_VERIFY_TOKEN}}'
-        WHATSAPP_PHONE_NUMBER_ID: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:WHATSAPP_PHONE_NUMBER_ID}}'
-        ALLOWED_PHONE_NUMBERS: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:ALLOWED_PHONE_NUMBERS}}'
+        TELEGRAM_BOT_TOKEN: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:TELEGRAM_BOT_TOKEN}}'
+        TELEGRAM_WEBHOOK_SECRET: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:TELEGRAM_WEBHOOK_SECRET}}'
+        ALLOWED_CHAT_IDS: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:ALLOWED_CHAT_IDS}}'
 
 Resources:
   # DynamoDB Table (single-table design)
@@ -121,7 +120,7 @@ Resources:
 
 Outputs:
   WebhookUrl:
-    Description: WhatsApp webhook URL (configure this in Meta Developer Portal)
+    Description: Telegram webhook URL (register via POST to https://api.telegram.org/bot{TOKEN}/setWebhook)
     Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/webhook'
   FitnessTableName:
     Description: DynamoDB table name
