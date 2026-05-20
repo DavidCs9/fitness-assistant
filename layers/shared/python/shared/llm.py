@@ -1,6 +1,8 @@
 import anthropic
+from typing import Optional
+
 from shared.config import Config
-from shared.models import DailySummary, BodyMetrics
+from shared.models import DailySummary, BodyMetrics, Profile
 
 _client = None
 
@@ -26,13 +28,29 @@ La retroalimentación (immediate_feedback) debe ser:
 - Breve (máximo 2 oraciones)
 - En español
 - Útil y específica (menciona los valores estimados)
+- Cuando exista un perfil del usuario con metas (calorías, proteína), compara contra esas metas y menciona cuánto falta o por cuánto se pasó. No prediques, sé directo y útil.
 - Motivadora pero honesta
 
-Ejemplos de retroalimentación:
-- Comida: "Buen desayuno. Estimé ~350 cal y 25g de proteína."
-- Ejercicio: "Excelente rutina. Estimé ~400 cal quemadas."
-- Peso: "Peso registrado. Vas bien con el seguimiento."
+Ejemplos:
+- Sin perfil: "Buen desayuno. Estimé ~350 cal y 25g de proteína."
+- Con perfil (meta 2000 cal, 200g prot): "Buen desayuno. ~350 cal y 25g prot — te quedan 1650 cal y 175g prot para hoy."
 """
+
+
+def _profile_block(profile: Optional[Profile]) -> str:
+    if profile is None:
+        return ""
+    return (
+        f"\n\nPerfil del usuario (úsalo para personalizar retroalimentación):\n"
+        f"- Edad: {profile.age}, Sexo: {profile.sex}, Altura: {profile.height_cm}cm\n"
+        f"- Peso inicial: {profile.baseline_weight_kg}kg ({profile.baseline_date})\n"
+        f"- Meta: {profile.goal}\n"
+        f"- Metas diarias: {profile.target_calories} cal, "
+        f"{profile.target_protein_g}g proteína, {profile.target_fat_g}g grasa, "
+        f"{profile.target_carbs_g}g carbohidratos, {profile.target_fiber_g}g fibra\n"
+        f"- TDEE estimado: {profile.tdee} cal/día"
+    )
+
 
 EXTRACTION_TOOL = {
     "name": "log_fitness_data",
@@ -105,12 +123,29 @@ EXTRACTION_TOOL = {
 }
 
 
-def extract_intent(message: str) -> dict:
+def extract_intent(message: str, profile: Optional[Profile] = None, today_progress: Optional[DailySummary] = None) -> dict:
     """Extract structured fitness data from a user message using Claude with tool_use."""
+    system_blocks = [
+        # Static prompt — cached across requests
+        {"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}},
+    ]
+    profile_text = _profile_block(profile)
+    if profile_text:
+        # Profile is small and changes rarely; append uncached so any profile change just falls back to cache miss on prefix
+        if today_progress is not None:
+            profile_text += (
+                f"\n\nProgreso de hoy hasta ahora: "
+                f"{today_progress.total_calories} cal consumidas, "
+                f"{today_progress.total_protein}g proteína, "
+                f"{today_progress.total_fiber}g fibra, "
+                f"{today_progress.total_calories_burned} cal quemadas."
+            )
+        system_blocks.append({"type": "text", "text": profile_text})
+
     response = _get_client().messages.create(
         model=Config.CLAUDE_MODEL,
         max_tokens=1024,
-        system=[{"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+        system=system_blocks,
         tools=[EXTRACTION_TOOL],
         tool_choice={"type": "tool", "name": "log_fitness_data"},
         messages=[{"role": "user", "content": message}],
@@ -121,13 +156,29 @@ def extract_intent(message: str) -> dict:
     return {"intent": "unknown"}
 
 
-def generate_daily_summary_message(summary: DailySummary, meals: list) -> str:
+def generate_daily_summary_message(summary: DailySummary, meals: list, profile: Optional[Profile] = None) -> str:
     """Generate a friendly daily summary message using Claude."""
     meal_list = "\n".join(
         f"- {m.meal_description} (~{m.estimated_calories} cal, {m.estimated_protein}g prot)"
         for m in meals
     )
     net_calories = summary.total_calories - summary.total_calories_burned
+
+    target_section = ""
+    if profile is not None:
+        cal_delta = profile.target_calories - summary.total_calories
+        prot_delta = profile.target_protein_g - summary.total_protein
+        fiber_delta = profile.target_fiber_g - summary.total_fiber
+        target_section = (
+            f"\nMetas vs realidad:\n"
+            f"- Calorías: {summary.total_calories}/{profile.target_calories} "
+            f"({'+' if cal_delta < 0 else '-'}{abs(cal_delta)} cal)\n"
+            f"- Proteína: {summary.total_protein}/{profile.target_protein_g}g "
+            f"({'+' if prot_delta < 0 else '-'}{abs(prot_delta)}g)\n"
+            f"- Fibra: {summary.total_fiber}/{profile.target_fiber_g}g "
+            f"({'+' if fiber_delta < 0 else '-'}{abs(fiber_delta)}g)\n"
+            f"- Meta del usuario: {profile.goal}"
+        )
 
     prompt = f"""Genera un resumen diario amigable y motivador en español para el usuario basándote en estos datos:
 
@@ -142,11 +193,12 @@ Resumen:
 - Pasos: {summary.total_steps}
 - Calorías netas: {net_calories}
 - Comidas registradas: {summary.meal_count}
-- Riesgo de hambre nocturna: {summary.hunger_risk()}
+- Riesgo de hambre nocturna: {summary.hunger_risk()}{target_section}
 
 El mensaje debe ser:
 - En español, conversacional, máximo 5 oraciones
 - Mencionar los números más relevantes
+- Si hay metas, comparar contra ellas con honestidad (déficit, sobrepasarse, etc.)
 - Dar 1 consejo concreto para mañana
 - Terminar con un emoji motivador"""
 
@@ -158,7 +210,11 @@ El mensaje debe ser:
     return response.content[0].text
 
 
-def generate_weekly_trend_message(days: list[DailySummary], body_metrics: list[BodyMetrics]) -> str:
+def generate_weekly_trend_message(
+    days: list[DailySummary],
+    body_metrics: list[BodyMetrics],
+    profile: Optional[Profile] = None,
+) -> str:
     """Generate a weekly trend analysis message using Claude."""
     days_data = "\n".join(
         f"- {d.date}: {d.total_calories} cal, {d.total_protein}g prot, {d.total_fiber}g fibra, {d.total_steps} pasos"
@@ -170,19 +226,30 @@ def generate_weekly_trend_message(days: list[DailySummary], body_metrics: list[B
         if m.weight_kg is not None
     )
 
+    profile_section = ""
+    if profile is not None:
+        profile_section = (
+            f"\nMetas del usuario:\n"
+            f"- Meta: {profile.goal}\n"
+            f"- Calorías diarias objetivo: {profile.target_calories}\n"
+            f"- Proteína diaria objetivo: {profile.target_protein_g}g\n"
+            f"- Peso inicial: {profile.baseline_weight_kg}kg ({profile.baseline_date})"
+        )
+
     prompt = f"""Genera un análisis de tendencias semanal en español basándote en estos datos:
 
 Datos diarios (últimos 7 días):
 {days_data if days_data else "Sin datos"}
 
 Peso registrado:
-{metrics_data if metrics_data else "Sin registros de peso"}
+{metrics_data if metrics_data else "Sin registros de peso"}{profile_section}
 
 El análisis debe:
 - Estar en español, ser conversacional, máximo 6 oraciones
+- Comparar el promedio semanal contra las metas si existen
 - Identificar 1-2 tendencias positivas
 - Identificar 1 área de mejora con sugerencia concreta
-- Mencionar progreso de peso si hay datos
+- Mencionar progreso de peso vs inicial si hay datos
 - Terminar con motivación para la siguiente semana"""
 
     response = _get_client().messages.create(

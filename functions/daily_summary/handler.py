@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone
 
 from shared.config import Config
-from shared.dynamo import compute_and_save_daily_summary, get_meals_for_date
+from shared.dynamo import compute_and_save_daily_summary, get_meals_for_date, get_profile
 from shared.llm import generate_daily_summary_message
 from shared.telegram import send_message
 
@@ -31,6 +31,7 @@ def _send_daily_summary(chat_id: str, date: str) -> None:
         return
 
     meals = get_meals_for_date(chat_id, date)
-    message = generate_daily_summary_message(summary, meals)
+    profile = get_profile(chat_id)
+    message = generate_daily_summary_message(summary, meals, profile=profile)
     send_message(chat_id, message)
     logger.info("Sent daily summary to %s for %s", chat_id, date)

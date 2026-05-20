@@ -82,6 +82,61 @@ class ExerciseLog:
 
 
 @dataclass
+class Profile:
+    user_id: str
+    age: int
+    sex: str  # "male" or "female"
+    height_cm: int
+    activity_level: str  # sedentary | light | moderate | very_active
+    goal: str  # lose_fat | maintain | gain_muscle | track
+    training_experience: str  # beginner | intermediate | advanced
+    baseline_date: str
+    baseline_weight_kg: Decimal
+    baseline_waist_cm: Optional[Decimal] = None
+    baseline_neck_cm: Optional[Decimal] = None
+    baseline_arms_cm: Optional[Decimal] = None
+    baseline_body_fat_pct: Optional[Decimal] = None
+    bmr: int = 0
+    tdee: int = 0
+    target_calories: int = 0
+    target_protein_g: int = 0
+    target_fat_g: int = 0
+    target_carbs_g: int = 0
+    target_fiber_g: int = 0
+
+    def to_dynamo(self) -> dict:
+        item = {
+            "PK": f"USER#{self.user_id}",
+            "SK": "PROFILE",
+            "entity_type": "profile",
+            "age": self.age,
+            "sex": self.sex,
+            "height_cm": self.height_cm,
+            "activity_level": self.activity_level,
+            "goal": self.goal,
+            "training_experience": self.training_experience,
+            "baseline_date": self.baseline_date,
+            "baseline_weight_kg": self.baseline_weight_kg,
+            "bmr": self.bmr,
+            "tdee": self.tdee,
+            "target_calories": self.target_calories,
+            "target_protein_g": self.target_protein_g,
+            "target_fat_g": self.target_fat_g,
+            "target_carbs_g": self.target_carbs_g,
+            "target_fiber_g": self.target_fiber_g,
+        }
+        if self.baseline_waist_cm is not None:
+            item["baseline_waist_cm"] = self.baseline_waist_cm
+        if self.baseline_neck_cm is not None:
+            item["baseline_neck_cm"] = self.baseline_neck_cm
+        if self.baseline_arms_cm is not None:
+            item["baseline_arms_cm"] = self.baseline_arms_cm
+        if self.baseline_body_fat_pct is not None:
+            item["baseline_body_fat_pct"] = self.baseline_body_fat_pct
+        return item
+
+
+@dataclass
 class DailySummary:
     user_id: str
     date: str

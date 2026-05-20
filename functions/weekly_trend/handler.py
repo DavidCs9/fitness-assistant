@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 
 from shared.config import Config
-from shared.dynamo import get_daily_summaries_range, get_body_metrics_range
+from shared.dynamo import get_daily_summaries_range, get_body_metrics_range, get_profile
 from shared.llm import generate_weekly_trend_message
 from shared.telegram import send_message
 
@@ -32,6 +32,7 @@ def _send_weekly_trend(chat_id: str, start_date: str, end_date: str) -> None:
         logger.info("No data for %s in range %s-%s, skipping", chat_id, start_date, end_date)
         return
 
-    message = generate_weekly_trend_message(days, body_metrics)
+    profile = get_profile(chat_id)
+    message = generate_weekly_trend_message(days, body_metrics, profile=profile)
     send_message(chat_id, message)
     logger.info("Sent weekly trend to %s (%s to %s)", chat_id, start_date, end_date)

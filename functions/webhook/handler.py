@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from shared.dynamo import (
     save_meal, save_body_metrics, save_exercise,
-    get_daily_summary, compute_and_save_daily_summary,
+    get_daily_summary, compute_and_save_daily_summary, get_profile,
 )
 from shared.llm import extract_intent
 from shared.models import MealLog, BodyMetrics, ExerciseLog, IntentType
@@ -53,7 +53,10 @@ def _process_message(chat_id: str, text: str) -> None:
     today = now.strftime("%Y-%m-%d")
     timestamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    extracted = extract_intent(text)
+    profile = get_profile(chat_id)
+    # Pre-fetch today's running summary so the LLM can give "X cal left" feedback
+    today_progress = get_daily_summary(chat_id, today)
+    extracted = extract_intent(text, profile=profile, today_progress=today_progress)
     intent = extracted.get("intent", IntentType.UNKNOWN)
     feedback = extracted.get("immediate_feedback", "")
 
@@ -99,11 +102,26 @@ def _process_message(chat_id: str, text: str) -> None:
         # Fall back to on-demand computation if no materialized summary exists yet.
         summary = get_daily_summary(chat_id, today) or compute_and_save_daily_summary(chat_id, today)
         if summary.meal_count > 0 or summary.total_steps > 0 or summary.total_calories_burned > 0:
-            reply = (
-                f"Hoy: {summary.total_calories} cal | {summary.total_protein}g prot | "
-                f"{summary.total_fiber}g fibra | {summary.total_steps} pasos\n"
-                f"Riesgo hambre: {summary.hunger_risk()}"
-            )
+            if profile:
+                cal_left = profile.target_calories - summary.total_calories
+                prot_left = profile.target_protein_g - summary.total_protein
+                fiber_left = profile.target_fiber_g - summary.total_fiber
+                reply = (
+                    f"Hoy: {summary.total_calories}/{profile.target_calories} cal "
+                    f"({'faltan' if cal_left > 0 else 'sobran'} {abs(cal_left)})\n"
+                    f"Proteína: {summary.total_protein}/{profile.target_protein_g}g "
+                    f"({'faltan' if prot_left > 0 else 'sobran'} {abs(prot_left)}g)\n"
+                    f"Fibra: {summary.total_fiber}/{profile.target_fiber_g}g "
+                    f"({'faltan' if fiber_left > 0 else 'sobran'} {abs(fiber_left)}g)\n"
+                    f"Pasos: {summary.total_steps} | Quemadas ejercicio: {summary.total_calories_burned}\n"
+                    f"Riesgo hambre: {summary.hunger_risk()}"
+                )
+            else:
+                reply = (
+                    f"Hoy: {summary.total_calories} cal | {summary.total_protein}g prot | "
+                    f"{summary.total_fiber}g fibra | {summary.total_steps} pasos\n"
+                    f"Riesgo hambre: {summary.hunger_risk()}"
+                )
         else:
             reply = "Aún no tienes registros para hoy."
 

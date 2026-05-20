@@ -3,7 +3,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 
 from shared.config import Config
-from shared.models import MealLog, BodyMetrics, ExerciseLog, DailySummary
+from shared.models import MealLog, BodyMetrics, ExerciseLog, DailySummary, Profile
 
 _table = None
 
@@ -63,6 +63,42 @@ def save_body_metrics(metrics: BodyMetrics) -> None:
 def save_exercise(exercise: ExerciseLog) -> None:
     table = _get_table()
     table.put_item(Item=_decimalize(exercise.to_dynamo()))
+
+
+def save_profile(profile: Profile) -> None:
+    table = _get_table()
+    table.put_item(Item=_decimalize(profile.to_dynamo()))
+
+
+def get_profile(user_id: str) -> Optional[Profile]:
+    table = _get_table()
+    resp = table.get_item(Key={"PK": f"USER#{user_id}", "SK": "PROFILE"})
+    item = resp.get("Item")
+    if not item:
+        return None
+    item = _from_decimal(item)
+    return Profile(
+        user_id=user_id,
+        age=item["age"],
+        sex=item["sex"],
+        height_cm=item["height_cm"],
+        activity_level=item["activity_level"],
+        goal=item["goal"],
+        training_experience=item["training_experience"],
+        baseline_date=item["baseline_date"],
+        baseline_weight_kg=_to_decimal(item["baseline_weight_kg"]),
+        baseline_waist_cm=_to_decimal(item["baseline_waist_cm"]) if "baseline_waist_cm" in item else None,
+        baseline_neck_cm=_to_decimal(item["baseline_neck_cm"]) if "baseline_neck_cm" in item else None,
+        baseline_arms_cm=_to_decimal(item["baseline_arms_cm"]) if "baseline_arms_cm" in item else None,
+        baseline_body_fat_pct=_to_decimal(item["baseline_body_fat_pct"]) if "baseline_body_fat_pct" in item else None,
+        bmr=item.get("bmr", 0),
+        tdee=item.get("tdee", 0),
+        target_calories=item.get("target_calories", 0),
+        target_protein_g=item.get("target_protein_g", 0),
+        target_fat_g=item.get("target_fat_g", 0),
+        target_carbs_g=item.get("target_carbs_g", 0),
+        target_fiber_g=item.get("target_fiber_g", 0),
+    )
 
 
 def upsert_daily_summary(summary: DailySummary) -> None:
