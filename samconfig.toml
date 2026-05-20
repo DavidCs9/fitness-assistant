@@ -1,0 +1,31 @@
+[default]
+[default.global.parameters]
+stack_name = "fitness-assistant-dev"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.deploy.parameters]
+stack_name = "fitness-assistant-dev"
+resolve_s3 = true
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "Stage=dev"
+confirm_changeset = true
+
+[prod]
+[prod.global.parameters]
+stack_name = "fitness-assistant-prod"
+
+[prod.build.parameters]
+cached = true
+parallel = true
+
+[prod.deploy.parameters]
+stack_name = "fitness-assistant-prod"
+resolve_s3 = true
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "Stage=prod"
+confirm_changeset = true

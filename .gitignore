@@ -1,0 +1,24 @@
+# SAM build artifacts
+.aws-sam/
+samconfig.toml.bak
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Secrets (never commit)
+.env
+*.env.local
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp

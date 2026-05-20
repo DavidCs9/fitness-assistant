@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Fitness Assistant - WhatsApp-based conversational fitness tracker
+
+Parameters:
+  Stage:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, prod]
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 30
+    MemorySize: 256
+    Layers:
+      - !Ref SharedLayer
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref FitnessTable
+        STAGE: !Ref Stage
+        ANTHROPIC_API_KEY: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:ANTHROPIC_API_KEY}}'
+        WHATSAPP_TOKEN: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:WHATSAPP_TOKEN}}'
+        WHATSAPP_VERIFY_TOKEN: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:WHATSAPP_VERIFY_TOKEN}}'
+        WHATSAPP_PHONE_NUMBER_ID: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:WHATSAPP_PHONE_NUMBER_ID}}'
+        ALLOWED_PHONE_NUMBERS: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:ALLOWED_PHONE_NUMBERS}}'
+
+Resources:
+  # DynamoDB Table (single-table design)
+  FitnessTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'FitnessAssistant-${Stage}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # Shared Lambda Layer (anthropic SDK + shared package)
+  SharedLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: !Sub 'fitness-assistant-shared-${Stage}'
+      Description: Shared code and dependencies
+      ContentUri: layers/shared/
+      CompatibleRuntimes:
+        - python3.12
+      RetentionPolicy: Delete
+    Metadata:
+      BuildMethod: makefile
+
+  # Webhook Lambda (WhatsApp Cloud API receiver)
+  WebhookFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fitness-assistant-webhook-${Stage}'
+      CodeUri: functions/webhook/
+      Handler: handler.lambda_handler
+      Events:
+        ApiGET:
+          Type: Api
+          Properties:
+            Path: /webhook
+            Method: GET
+        ApiPOST:
+          Type: Api
+          Properties:
+            Path: /webhook
+            Method: POST
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref FitnessTable
+
+  # Daily Summary Lambda (runs every night at 11 PM UTC)
+  DailySummaryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fitness-assistant-daily-summary-${Stage}'
+      CodeUri: functions/daily_summary/
+      Handler: handler.lambda_handler
+      Timeout: 60
+      Events:
+        DailySchedule:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: 'cron(0 23 * * ? *)'
+            ScheduleExpressionTimezone: UTC
+            State: ENABLED
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref FitnessTable
+
+  # Weekly Trend Lambda (runs every Sunday at 10 AM UTC)
+  WeeklyTrendFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'fitness-assistant-weekly-trend-${Stage}'
+      CodeUri: functions/weekly_trend/
+      Handler: handler.lambda_handler
+      Timeout: 60
+      Events:
+        WeeklySchedule:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: 'cron(0 10 ? * SUN *)'
+            ScheduleExpressionTimezone: UTC
+            State: ENABLED
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref FitnessTable
+
+Outputs:
+  WebhookUrl:
+    Description: WhatsApp webhook URL (configure this in Meta Developer Portal)
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/webhook'
+  FitnessTableName:
+    Description: DynamoDB table name
+    Value: !Ref FitnessTable
