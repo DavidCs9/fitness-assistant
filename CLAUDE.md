@@ -66,6 +66,30 @@ All secrets (`ANTHROPIC_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET
 
 `ALLOWED_CHAT_IDS` is a comma-separated list of Telegram numeric chat IDs. The webhook silently returns `200 OK` for unknown chat IDs to avoid leaking bot existence. `verify_telegram_secret` checks the `X-Telegram-Bot-Api-Secret-Token` header on every POST.
 
+## Monitoring LLM costs
+
+Every Anthropic API call logs a structured JSON line to CloudWatch Logs (no custom metrics — intentional, to avoid per-metric charges). Query with CloudWatch Logs Insights across all three log groups:
+
+**Cost by caller (total)**
+```
+filter event = "llm_usage"
+| stats sum(estimated_cost_usd) as total_cost, sum(input_tokens) as total_input, sum(output_tokens) as total_output by caller
+```
+
+**Daily cost trend**
+```
+filter event = "llm_usage"
+| stats sum(estimated_cost_usd) as daily_cost by datefloor(@timestamp, 1d)
+```
+
+**Cache efficiency (cache hits vs misses)**
+```
+filter event = "llm_usage"
+| stats sum(cache_read_tokens) as cache_hits, sum(cache_creation_tokens) as cache_writes, sum(input_tokens) as uncached by caller
+```
+
+Pricing constants live in `layers/shared/python/shared/llm.py` (`_PRICE_PER_M`) — update them if Anthropic changes rates.
+
 ## Key constraints
 
 - **Spanish-first**: all LLM prompts and user-facing replies are in Spanish.
