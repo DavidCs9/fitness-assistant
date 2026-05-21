@@ -103,6 +103,7 @@ class Profile:
     target_fat_g: int = 0
     target_carbs_g: int = 0
     target_fiber_g: int = 0
+    timezone: str = "UTC"
 
     def to_dynamo(self) -> dict:
         item = {
@@ -124,6 +125,7 @@ class Profile:
             "target_fat_g": self.target_fat_g,
             "target_carbs_g": self.target_carbs_g,
             "target_fiber_g": self.target_fiber_g,
+            "timezone": self.timezone,
         }
         if self.baseline_waist_cm is not None:
             item["baseline_waist_cm"] = self.baseline_waist_cm

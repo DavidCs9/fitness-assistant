@@ -1,10 +1,44 @@
 import anthropic
+import json
+import logging
 from typing import Optional
 
 from shared.config import Config
 from shared.models import DailySummary, BodyMetrics, Profile
 
+logger = logging.getLogger(__name__)
+
 _client = None
+
+# Pricing per million tokens for claude-haiku-4-5 (update if Anthropic changes rates)
+_PRICE_PER_M = {
+    "input": 0.80,
+    "output": 4.00,
+    "cache_write": 1.00,
+    "cache_read": 0.08,
+}
+
+
+def _log_usage(response: anthropic.types.Message, caller: str) -> None:
+    u = response.usage
+    cost = (
+        getattr(u, "input_tokens", 0) * _PRICE_PER_M["input"]
+        + getattr(u, "output_tokens", 0) * _PRICE_PER_M["output"]
+        + getattr(u, "cache_creation_input_tokens", 0) * _PRICE_PER_M["cache_write"]
+        + getattr(u, "cache_read_input_tokens", 0) * _PRICE_PER_M["cache_read"]
+    ) / 1_000_000
+    logger.info(
+        json.dumps({
+            "event": "llm_usage",
+            "caller": caller,
+            "model": response.model,
+            "input_tokens": getattr(u, "input_tokens", 0),
+            "output_tokens": getattr(u, "output_tokens", 0),
+            "cache_creation_tokens": getattr(u, "cache_creation_input_tokens", 0),
+            "cache_read_tokens": getattr(u, "cache_read_input_tokens", 0),
+            "estimated_cost_usd": round(cost, 8),
+        })
+    )
 
 
 def _get_client() -> anthropic.Anthropic:
@@ -150,6 +184,7 @@ def extract_intent(message: str, profile: Optional[Profile] = None, today_progre
         tool_choice={"type": "tool", "name": "log_fitness_data"},
         messages=[{"role": "user", "content": message}],
     )
+    _log_usage(response, "extract_intent")
     for block in response.content:
         if block.type == "tool_use" and block.name == "log_fitness_data":
             return block.input
@@ -207,6 +242,7 @@ El mensaje debe ser:
         max_tokens=512,
         messages=[{"role": "user", "content": prompt}],
     )
+    _log_usage(response, "generate_daily_summary_message")
     return response.content[0].text
 
 
@@ -257,4 +293,5 @@ El análisis debe:
         max_tokens=512,
         messages=[{"role": "user", "content": prompt}],
     )
+    _log_usage(response, "generate_weekly_trend_message")
     return response.content[0].text

@@ -1,7 +1,8 @@
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from shared.dynamo import (
     save_meal, save_body_metrics, save_exercise,
@@ -49,11 +50,11 @@ def lambda_handler(event: dict, context) -> dict:
 
 
 def _process_message(chat_id: str, text: str) -> None:
-    now = datetime.now(timezone.utc)
-    today = now.strftime("%Y-%m-%d")
-    timestamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
-
     profile = get_profile(chat_id)
+    now = datetime.now(ZoneInfo(profile.timezone if profile else "UTC"))
+    today = now.strftime("%Y-%m-%d")
+    timestamp = now.strftime("%Y-%m-%dT%H:%M:%S")
+
     # Pre-fetch today's running summary so the LLM can give "X cal left" feedback
     today_progress = get_daily_summary(chat_id, today)
     extracted = extract_intent(text, profile=profile, today_progress=today_progress)

@@ -98,6 +98,7 @@ def get_profile(user_id: str) -> Optional[Profile]:
         target_fat_g=item.get("target_fat_g", 0),
         target_carbs_g=item.get("target_carbs_g", 0),
         target_fiber_g=item.get("target_fiber_g", 0),
+        timezone=item.get("timezone", "UTC"),
     )
 
 
