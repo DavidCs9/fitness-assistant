@@ -3,6 +3,13 @@ name: Deploy Dev
 on:
   push:
     branches: [main]
+    paths:
+      - 'functions/**'
+      - 'layers/**'
+      - 'template.yaml'
+      - 'samconfig.toml'
+      - 'tests/**'
+      - '.github/workflows/deploy-dev.yml'
 
 jobs:
   test:
