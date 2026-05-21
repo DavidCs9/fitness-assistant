@@ -44,7 +44,7 @@ def _log_usage(response: anthropic.types.Message, caller: str) -> None:
 def _get_client() -> anthropic.Anthropic:
     global _client
     if _client is None:
-        _client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
+        _client = anthropic.Anthropic(api_key=Config.get_anthropic_api_key())
     return _client
 
 

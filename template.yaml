@@ -19,10 +19,7 @@ Globals:
       Variables:
         TABLE_NAME: !Ref FitnessTable
         STAGE: !Ref Stage
-        ANTHROPIC_API_KEY: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:ANTHROPIC_API_KEY}}'
-        TELEGRAM_BOT_TOKEN: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:TELEGRAM_BOT_TOKEN}}'
-        TELEGRAM_WEBHOOK_SECRET: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:TELEGRAM_WEBHOOK_SECRET}}'
-        ALLOWED_CHAT_IDS: !Sub '{{resolve:secretsmanager:fitness-assistant/${Stage}:SecretString:ALLOWED_CHAT_IDS}}'
+        SECRETS_ID: !Sub 'fitness-assistant/${Stage}'
 
 Resources:
   # DynamoDB Table (single-table design)
@@ -79,6 +76,8 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref FitnessTable
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:fitness-assistant/${Stage}-*'
 
   # Daily Summary Lambda (runs every night at 11 PM UTC)
   DailySummaryFunction:
@@ -92,12 +91,15 @@ Resources:
         DailySchedule:
           Type: ScheduleV2
           Properties:
+            Name: !Sub 'fitness-assistant-daily-${Stage}'
             ScheduleExpression: 'cron(0 23 * * ? *)'
             ScheduleExpressionTimezone: UTC
             State: ENABLED
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref FitnessTable
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:fitness-assistant/${Stage}-*'
 
   # Weekly Trend Lambda (runs every Sunday at 10 AM UTC)
   WeeklyTrendFunction:
@@ -111,12 +113,15 @@ Resources:
         WeeklySchedule:
           Type: ScheduleV2
           Properties:
+            Name: !Sub 'fitness-assistant-weekly-${Stage}'
             ScheduleExpression: 'cron(0 10 ? * SUN *)'
             ScheduleExpressionTimezone: UTC
             State: ENABLED
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref FitnessTable
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:fitness-assistant/${Stage}-*'
 
 Outputs:
   WebhookUrl:

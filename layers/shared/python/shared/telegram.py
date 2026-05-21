@@ -23,7 +23,7 @@ def parse_incoming_message(body: dict) -> tuple[Optional[str], Optional[str]]:
 
 def send_message(chat_id: str, text: str) -> None:
     """Send a Telegram text message via the Bot API."""
-    url = f"{TELEGRAM_API}/bot{Config.TELEGRAM_BOT_TOKEN}/sendMessage"
+    url = f"{TELEGRAM_API}/bot{Config.get_telegram_bot_token()}/sendMessage"
     payload = json.dumps({"chat_id": chat_id, "text": text}).encode("utf-8")
     req = urllib.request.Request(
         url,
@@ -36,14 +36,13 @@ def send_message(chat_id: str, text: str) -> None:
 
 
 def is_authorized(chat_id: str) -> bool:
-    return chat_id in Config.ALLOWED_CHAT_IDS
+    return chat_id in Config.get_allowed_chat_ids()
 
 
 def verify_telegram_secret(event: dict) -> bool:
-    """Verify the X-Telegram-Bot-Api-Secret-Token header matches our secret."""
     headers = event.get("headers") or {}
     sent = (
         headers.get("x-telegram-bot-api-secret-token")
         or headers.get("X-Telegram-Bot-Api-Secret-Token")
     )
-    return sent == Config.TELEGRAM_WEBHOOK_SECRET
+    return sent == Config.get_telegram_webhook_secret()

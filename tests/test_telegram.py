@@ -42,42 +42,35 @@ class TestParseIncomingMessage:
 class TestVerifyTelegramSecret:
     def test_valid_secret_lowercase_header(self):
         event = {"headers": {"x-telegram-bot-api-secret-token": "mysecret"}}
-        with patch("shared.telegram.Config") as mock_config:
-            mock_config.TELEGRAM_WEBHOOK_SECRET = "mysecret"
+        with patch("shared.telegram.Config.get_telegram_webhook_secret", return_value="mysecret"):
             assert telegram.verify_telegram_secret(event) is True
 
     def test_valid_secret_uppercase_header(self):
         event = {"headers": {"X-Telegram-Bot-Api-Secret-Token": "mysecret"}}
-        with patch("shared.telegram.Config") as mock_config:
-            mock_config.TELEGRAM_WEBHOOK_SECRET = "mysecret"
+        with patch("shared.telegram.Config.get_telegram_webhook_secret", return_value="mysecret"):
             assert telegram.verify_telegram_secret(event) is True
 
     def test_invalid_secret(self):
         event = {"headers": {"x-telegram-bot-api-secret-token": "wrong"}}
-        with patch("shared.telegram.Config") as mock_config:
-            mock_config.TELEGRAM_WEBHOOK_SECRET = "mysecret"
+        with patch("shared.telegram.Config.get_telegram_webhook_secret", return_value="mysecret"):
             assert telegram.verify_telegram_secret(event) is False
 
     def test_missing_header(self):
         event = {"headers": {}}
-        with patch("shared.telegram.Config") as mock_config:
-            mock_config.TELEGRAM_WEBHOOK_SECRET = "mysecret"
+        with patch("shared.telegram.Config.get_telegram_webhook_secret", return_value="mysecret"):
             assert telegram.verify_telegram_secret(event) is False
 
     def test_missing_headers_key(self):
         event = {}
-        with patch("shared.telegram.Config") as mock_config:
-            mock_config.TELEGRAM_WEBHOOK_SECRET = "mysecret"
+        with patch("shared.telegram.Config.get_telegram_webhook_secret", return_value="mysecret"):
             assert telegram.verify_telegram_secret(event) is False
 
 
 class TestIsAuthorized:
     def test_authorized_user(self):
-        with patch("shared.telegram.Config") as mock_config:
-            mock_config.ALLOWED_CHAT_IDS = ["123", "456"]
+        with patch("shared.telegram.Config.get_allowed_chat_ids", return_value={"123", "456"}):
             assert telegram.is_authorized("123") is True
 
     def test_unauthorized_user(self):
-        with patch("shared.telegram.Config") as mock_config:
-            mock_config.ALLOWED_CHAT_IDS = ["123"]
+        with patch("shared.telegram.Config.get_allowed_chat_ids", return_value={"123"}):
             assert telegram.is_authorized("999") is False
