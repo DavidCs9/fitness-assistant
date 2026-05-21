@@ -4,10 +4,10 @@ build:
 	sam build
 
 deploy: build
-	sam deploy --config-env default
+	sam deploy --config-env default --no-confirm-changeset
 
 deploy-prod: build
-	sam deploy --config-env prod
+	sam deploy --config-env prod --no-confirm-changeset
 
 # Quick local test of the webhook handler
 local-test:
