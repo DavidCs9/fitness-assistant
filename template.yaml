@@ -92,8 +92,8 @@ Resources:
           Type: ScheduleV2
           Properties:
             Name: !Sub 'fitness-assistant-daily-${Stage}'
-            ScheduleExpression: 'cron(0 23 * * ? *)'
-            ScheduleExpressionTimezone: UTC
+            ScheduleExpression: 'cron(0 20 * * ? *)'
+            ScheduleExpressionTimezone: 'America/Mexico_City'
             State: ENABLED
       Policies:
         - DynamoDBCrudPolicy:
