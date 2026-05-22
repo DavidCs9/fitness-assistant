@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from shared.dynamo import (
     save_meal, save_body_metrics, save_exercise,
     get_daily_summary, compute_and_save_daily_summary, get_profile,
+    get_meals_for_date, get_exercises_for_date,
 )
 from shared.llm import extract_intent
 from shared.models import MealLog, BodyMetrics, ExerciseLog, IntentType
@@ -112,14 +113,25 @@ def _process_message(chat_id: str, text: str) -> None:
         reply = feedback or "Ejercicio registrado."
 
     elif intent == IntentType.QUERY_SUMMARY:
-        # Fall back to on-demand computation if no materialized summary exists yet.
         summary = get_daily_summary(chat_id, today) or compute_and_save_daily_summary(chat_id, today)
         if summary.meal_count > 0 or summary.total_steps > 0 or summary.total_calories_burned > 0:
+            meals = get_meals_for_date(chat_id, today)
+            exercises = get_exercises_for_date(chat_id, today)
+
+            meal_lines = "\n".join(
+                f"  • {m.meal_description} ({m.estimated_calories} cal, {m.estimated_protein}g prot)"
+                for m in meals
+            )
+            exercise_lines = "\n".join(
+                f"  • {e.exercise_description} ({e.estimated_calories_burned} cal quemadas)"
+                for e in exercises
+            )
+
             if profile:
                 cal_left = profile.target_calories - summary.total_calories
                 prot_left = profile.target_protein_g - summary.total_protein
                 fiber_left = profile.target_fiber_g - summary.total_fiber
-                reply = (
+                totals = (
                     f"Hoy: {summary.total_calories}/{profile.target_calories} cal "
                     f"({'faltan' if cal_left > 0 else 'sobran'} {abs(cal_left)})\n"
                     f"Proteína: {summary.total_protein}/{profile.target_protein_g}g "
@@ -130,11 +142,17 @@ def _process_message(chat_id: str, text: str) -> None:
                     f"Riesgo hambre: {summary.hunger_risk()}"
                 )
             else:
-                reply = (
+                totals = (
                     f"Hoy: {summary.total_calories} cal | {summary.total_protein}g prot | "
                     f"{summary.total_fiber}g fibra | {summary.total_steps} pasos\n"
                     f"Riesgo hambre: {summary.hunger_risk()}"
                 )
+
+            reply = totals
+            if meal_lines:
+                reply += f"\n\nComidas:\n{meal_lines}"
+            if exercise_lines:
+                reply += f"\n\nEjercicios:\n{exercise_lines}"
         else:
             reply = "Aún no tienes registros para hoy."
 
