@@ -55,8 +55,20 @@ def _process_message(chat_id: str, text: str) -> None:
     today = now.strftime("%Y-%m-%d")
     timestamp = now.strftime("%Y-%m-%dT%H:%M:%S")
 
-    # Pre-fetch today's running summary so the LLM can give "X cal left" feedback
     today_progress = get_daily_summary(chat_id, today)
+
+    logger.info(json.dumps({
+        "event": "message_received",
+        "chat_id": chat_id,
+        "today": today,
+        "today_progress": {
+            "total_calories": today_progress.total_calories if today_progress else None,
+            "total_protein": today_progress.total_protein if today_progress else None,
+            "total_fiber": today_progress.total_fiber if today_progress else None,
+            "meal_count": today_progress.meal_count if today_progress else None,
+        },
+    }))
+
     extracted = extract_intent(text, profile=profile, today_progress=today_progress)
     intent = extracted.get("intent", IntentType.UNKNOWN)
     feedback = extracted.get("immediate_feedback", "")

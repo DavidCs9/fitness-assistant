@@ -157,24 +157,50 @@ EXTRACTION_TOOL = {
 }
 
 
+def _progress_block(profile: Profile, today_progress: Optional[DailySummary]) -> str:
+    if today_progress is None:
+        return ""
+    consumed_cal = today_progress.total_calories
+    consumed_prot = today_progress.total_protein
+    consumed_fiber = today_progress.total_fiber
+    burned = today_progress.total_calories_burned
+    remaining_cal = profile.target_calories - consumed_cal
+    remaining_prot = profile.target_protein_g - consumed_prot
+    remaining_fiber = profile.target_fiber_g - consumed_fiber
+    return (
+        f"\n\nProgreso de hoy hasta ahora (ANTES de registrar este mensaje):\n"
+        f"- Consumido: {consumed_cal} cal, {consumed_prot}g proteína, {consumed_fiber}g fibra\n"
+        f"- Quemado por ejercicio: {burned} cal\n"
+        f"- Restante para meta: {remaining_cal} cal, {remaining_prot}g proteína, {remaining_fiber}g fibra\n"
+        f"Usa estos valores exactos para calcular cuánto queda después de este registro. No hagas aritmética propia."
+    )
+
+
 def extract_intent(message: str, profile: Optional[Profile] = None, today_progress: Optional[DailySummary] = None) -> dict:
-    """Extract structured fitness data from a user message using Claude with tool_use."""
     system_blocks = [
-        # Static prompt — cached across requests
         {"type": "text", "text": SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}},
     ]
     profile_text = _profile_block(profile)
     if profile_text:
-        # Profile is small and changes rarely; append uncached so any profile change just falls back to cache miss on prefix
-        if today_progress is not None:
-            profile_text += (
-                f"\n\nProgreso de hoy hasta ahora: "
-                f"{today_progress.total_calories} cal consumidas, "
-                f"{today_progress.total_protein}g proteína, "
-                f"{today_progress.total_fiber}g fibra, "
-                f"{today_progress.total_calories_burned} cal quemadas."
-            )
+        if profile is not None:
+            profile_text += _progress_block(profile, today_progress)
         system_blocks.append({"type": "text", "text": profile_text})
+
+    logger.info(json.dumps({
+        "event": "extract_intent_input",
+        "message": message,
+        "today_progress": {
+            "total_calories": today_progress.total_calories if today_progress else None,
+            "total_protein": today_progress.total_protein if today_progress else None,
+            "total_fiber": today_progress.total_fiber if today_progress else None,
+            "total_calories_burned": today_progress.total_calories_burned if today_progress else None,
+        },
+        "profile_targets": {
+            "target_calories": profile.target_calories if profile else None,
+            "target_protein_g": profile.target_protein_g if profile else None,
+            "target_fiber_g": profile.target_fiber_g if profile else None,
+        } if profile else None,
+    }))
 
     response = _get_client().messages.create(
         model=Config.CLAUDE_MODEL,
@@ -185,9 +211,19 @@ def extract_intent(message: str, profile: Optional[Profile] = None, today_progre
         messages=[{"role": "user", "content": message}],
     )
     _log_usage(response, "extract_intent")
+
     for block in response.content:
         if block.type == "tool_use" and block.name == "log_fitness_data":
-            return block.input
+            result = block.input
+            logger.info(json.dumps({
+                "event": "extract_intent_output",
+                "intent": result.get("intent"),
+                "estimated_calories": result.get("estimated_calories"),
+                "estimated_protein": result.get("estimated_protein"),
+                "estimated_fiber": result.get("estimated_fiber"),
+                "feedback": result.get("immediate_feedback"),
+            }))
+            return result
     return {"intent": "unknown"}
 
 
