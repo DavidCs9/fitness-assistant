@@ -1,7 +1,8 @@
 import anthropic
 import json
 import logging
-import openai as _openai_module
+import urllib.request
+import uuid
 from typing import Optional
 
 from shared.config import Config
@@ -10,7 +11,6 @@ from shared.models import DailySummary, BodyMetrics, Profile
 logger = logging.getLogger(__name__)
 
 _client = None
-_openai_client = None
 
 # Pricing per million tokens for claude-haiku-4-5 (update if Anthropic changes rates)
 _PRICE_PER_M = {
@@ -50,22 +50,31 @@ def _get_client() -> anthropic.Anthropic:
     return _client
 
 
-def _get_openai_client() -> _openai_module.OpenAI:
-    global _openai_client
-    if _openai_client is None:
-        _openai_client = _openai_module.OpenAI(api_key=Config.get_openai_api_key())
-    return _openai_client
-
-
 def transcribe_voice(audio_bytes: bytes) -> str:
-    client = _get_openai_client()
-    response = client.audio.transcriptions.create(
-        model="whisper-1",
-        file=("voice.ogg", audio_bytes, "audio/ogg"),
-        language="es",
+    boundary = uuid.uuid4().hex
+    body = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n'
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="language"\r\n\r\nes\r\n'
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="file"; filename="voice.ogg"\r\n'
+        f"Content-Type: audio/ogg\r\n\r\n"
+    ).encode() + audio_bytes + f"\r\n--{boundary}--\r\n".encode()
+
+    req = urllib.request.Request(
+        "https://api.openai.com/v1/audio/transcriptions",
+        data=body,
+        headers={
+            "Authorization": f"Bearer {Config.get_openai_api_key()}",
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+        },
+        method="POST",
     )
-    logger.info(json.dumps({"event": "voice_transcription", "transcript": response.text}))
-    return response.text
+    with urllib.request.urlopen(req) as resp:
+        text = json.loads(resp.read())["text"]
+    logger.info(json.dumps({"event": "voice_transcription", "transcript": text}))
+    return text
 
 
 SYSTEM_PROMPT = """Eres un asistente de fitness personal que ayuda a registrar comidas, ejercicio y métricas corporales.
