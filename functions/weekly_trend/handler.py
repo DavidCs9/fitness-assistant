@@ -12,7 +12,7 @@ logger.setLevel(logging.INFO)
 
 
 def lambda_handler(event: dict, context) -> dict:
-    for chat_id in Config.ALLOWED_CHAT_IDS:
+    for chat_id in Config.get_allowed_chat_ids():
         try:
             _send_weekly_trend(chat_id)
         except Exception:
