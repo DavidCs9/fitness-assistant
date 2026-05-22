@@ -8,17 +8,35 @@ TELEGRAM_API = "https://api.telegram.org"
 
 
 def parse_incoming_message(body: dict) -> tuple[Optional[str], Optional[str]]:
-    """
-    Parse a Telegram Bot API update payload.
-    Returns (chat_id, text) or (None, None) if not a text message.
-    """
     message = body.get("message") or body.get("edited_message")
-    if not message or "text" not in message:
+    if not message:
         return None, None
     chat_id = message.get("chat", {}).get("id")
     if chat_id is None:
         return None, None
-    return str(chat_id), message["text"]
+    return str(chat_id), message.get("text")
+
+
+def extract_voice_bytes(body: dict) -> Optional[bytes]:
+    message = body.get("message") or body.get("edited_message")
+    if not message:
+        return None
+    voice = message.get("voice") or message.get("audio")
+    if not voice:
+        return None
+    file_id = voice.get("file_id")
+    if not file_id:
+        return None
+
+    token = Config.get_telegram_bot_token()
+    get_file_url = f"{TELEGRAM_API}/bot{token}/getFile?file_id={file_id}"
+    with urllib.request.urlopen(get_file_url) as resp:
+        file_info = json.loads(resp.read())
+    file_path = file_info["result"]["file_path"]
+
+    download_url = f"{TELEGRAM_API}/file/bot{token}/{file_path}"
+    with urllib.request.urlopen(download_url) as resp:
+        return resp.read()
 
 
 def send_message(chat_id: str, text: str) -> None:

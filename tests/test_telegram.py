@@ -20,10 +20,11 @@ class TestParseIncomingMessage:
         assert chat_id == "42"
         assert text == "editado"
 
-    def test_returns_none_when_no_text(self):
+    def test_returns_none_text_when_no_text(self):
+        # Voice/non-text messages: chat_id is returned so voice fallback can proceed
         body = {"message": {"chat": {"id": 12345}}}
         chat_id, text = telegram.parse_incoming_message(body)
-        assert chat_id is None
+        assert chat_id == "12345"
         assert text is None
 
     def test_returns_none_when_no_message(self):

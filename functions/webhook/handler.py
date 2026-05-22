@@ -9,10 +9,10 @@ from shared.dynamo import (
     get_daily_summary, compute_and_save_daily_summary, get_profile,
     get_meals_for_date, get_exercises_for_date,
 )
-from shared.llm import extract_intent
+from shared.llm import extract_intent, transcribe_voice
 from shared.models import MealLog, BodyMetrics, ExerciseLog, IntentType
 from shared.telegram import (
-    parse_incoming_message, send_message, is_authorized, verify_telegram_secret,
+    parse_incoming_message, extract_voice_bytes, send_message, is_authorized, verify_telegram_secret,
 )
 
 logger = logging.getLogger()
@@ -34,7 +34,20 @@ def lambda_handler(event: dict, context) -> dict:
 
     chat_id, text = parse_incoming_message(body)
 
-    if chat_id is None or text is None:
+    if chat_id is None:
+        return {"statusCode": 200, "body": "OK"}
+
+    if text is None:
+        voice_bytes = extract_voice_bytes(body)
+        if voice_bytes is not None:
+            try:
+                text = transcribe_voice(voice_bytes)
+            except Exception:
+                logger.exception("Voice transcription failed for %s", chat_id)
+                send_message(chat_id, "No pude transcribir tu nota de voz. Intenta de nuevo.")
+                return {"statusCode": 200, "body": "OK"}
+
+    if text is None:
         return {"statusCode": 200, "body": "OK"}
 
     if not is_authorized(chat_id):

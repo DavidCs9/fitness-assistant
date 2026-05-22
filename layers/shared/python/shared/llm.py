@@ -1,6 +1,7 @@
 import anthropic
 import json
 import logging
+import openai as _openai_module
 from typing import Optional
 
 from shared.config import Config
@@ -9,6 +10,7 @@ from shared.models import DailySummary, BodyMetrics, Profile
 logger = logging.getLogger(__name__)
 
 _client = None
+_openai_client = None
 
 # Pricing per million tokens for claude-haiku-4-5 (update if Anthropic changes rates)
 _PRICE_PER_M = {
@@ -46,6 +48,24 @@ def _get_client() -> anthropic.Anthropic:
     if _client is None:
         _client = anthropic.Anthropic(api_key=Config.get_anthropic_api_key())
     return _client
+
+
+def _get_openai_client() -> _openai_module.OpenAI:
+    global _openai_client
+    if _openai_client is None:
+        _openai_client = _openai_module.OpenAI(api_key=Config.get_openai_api_key())
+    return _openai_client
+
+
+def transcribe_voice(audio_bytes: bytes) -> str:
+    client = _get_openai_client()
+    response = client.audio.transcriptions.create(
+        model="whisper-1",
+        file=("voice.ogg", audio_bytes, "audio/ogg"),
+        language="es",
+    )
+    logger.info(json.dumps({"event": "voice_transcription", "transcript": response.text}))
+    return response.text
 
 
 SYSTEM_PROMPT = """Eres un asistente de fitness personal que ayuda a registrar comidas, ejercicio y métricas corporales.

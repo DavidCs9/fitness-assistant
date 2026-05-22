@@ -41,3 +41,7 @@ class Config:
     def get_allowed_chat_ids(cls) -> set:
         raw = _get("ALLOWED_CHAT_IDS")
         return set(n.strip() for n in raw.split(",") if n.strip())
+
+    @classmethod
+    def get_openai_api_key(cls) -> str:
+        return _get("OPENAI_API_KEY")
